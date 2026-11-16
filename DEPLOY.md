@@ -1,6 +1,17 @@
 # Cómo publicar el sistema en internet
 
+**Producción actual:** https://finanzas-carpinteria.onrender.com
+Servicio Render `srv-dbtgq3e1egvs73aju4lg`, repositorio `josartpsd-cell/finanzas-carpinteria`, rama `master`.
+
 El sistema es una app Node con base SQLite y archivos subidos en disco. Necesita un servidor que ejecute Node y un **disco persistente** (sin disco, los datos se borran en cada despliegue).
+
+## Aviso importante sobre el plan gratuito
+
+El servicio está hoy en el plan **free**: no tiene disco persistente. Cada deploy o reinicio vuelve a crear la base con los datos de ejemplo, y lo que se haya registrado se pierde.
+
+Para conservar los datos hay que pasar al plan **starter** (agregar tarjeta en https://dashboard.render.com/billing) y crear el disco de 1 GB en `/var/data` con `DATA_DIR=/var/data` y `UPLOAD_DIR=/var/data/uploads`.
+
+Mientras tanto, usa **Cuentas y categorías → Respaldo → Descargar respaldo** para guardar un JSON con todo fuera del servidor.
 
 ## Antes de publicar: contraseña
 
