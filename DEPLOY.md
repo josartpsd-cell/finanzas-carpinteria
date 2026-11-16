@@ -75,6 +75,39 @@ RENDER_API_KEY=rnd_xxx GITHUB_REPO=usuario/finanzas-carpinteria APP_PASSWORD=tu_
 
 Crea el servicio web con disco de 1 GB en `/var/data`, variables de entorno y health check en `/login`. Grava o id do serviço e a URL em `render-service.json`.
 
+## Opción 6 — Hostinger
+
+### VPS (recomendado)
+
+Con root por SSH, un solo comando hace todo: instala Node 22, crea usuario, clona el repo, monta systemd y nginx.
+
+```bash
+HOST=IP_DO_VPS USER=root PORT_SSH=22 ./scripts/deploy-hostinger.sh
+```
+
+Con dominio y HTTPS:
+
+```bash
+HOST=IP USER=root DOMINIO=finanzas.seudominio.com ./scripts/deploy-hostinger.sh
+# depois, no servidor:
+certbot --nginx -d finanzas.seudominio.com
+```
+
+Los datos quedan en `/opt/finanzas/data` y `/opt/finanzas/uploads`, fuera del repositorio, y sobreviven a los deploys. Para actualizar: `git push` y volver a correr el script (hace `git reset --hard` y reinicia el servicio).
+
+### Hospedaje compartido (hPanel)
+
+El plan compartido no permite procesos propios ni systemd. Si el plan tiene **Setup Node.js App**:
+
+1. Sube el proyecto por Git o File Manager a `~/domains/SEU-DOMINIO/finanzas`.
+2. En hPanel → **Advanced → Node.js**: aplicación `finanzas`, versión 22, archivo de inicio `app.js`, modo `production`.
+3. Define las variables `DATA_DIR` y `UPLOAD_DIR` apuntando a una carpeta dentro de `~/domains/SEU-DOMINIO/datos`.
+4. Reinicia la aplicación desde hPanel.
+
+El archivo `app.js` en la raíz existe justamente para ese caso: solo importa `server.js`.
+
+Limitaciones del compartido: sin procesos en segundo plano, sin control de puertos y sin `certbot` propio. Para uso real con datos financieros, el VPS es la opción correcta.
+
 ## Variables de entorno
 
 | Variable | Para qué sirve | Por defecto |
