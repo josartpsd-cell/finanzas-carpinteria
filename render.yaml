@@ -15,6 +15,10 @@ services:
         value: /var/data/uploads
       - key: APP_PASSWORD
         sync: false
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
     disk:
       name: datos
       mountPath: /var/data

@@ -3,7 +3,7 @@ import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { all, get, run, nowIso, getSetting, setSetting, UPLOAD_DIR } from './db.js';
+import { all, get, run, nowIso, getSetting, setSetting, saveFile, UPLOAD_DIR } from './db.js';
 
 export const api = express.Router();
 api.use(express.json({ limit: '2mb' }));
@@ -674,21 +674,18 @@ api.put('/settings', (req, res) => {
   res.json(Object.fromEntries(rows.map((r) => [r.chave, r.valor])));
 });
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname || '').slice(0, 10) || '.bin';
-    cb(null, `${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`);
-  },
-});
-const upload = multer({ storage, limits: { fileSize: 15 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 api.post('/upload', upload.single('arquivo'), (req, res) => {
   if (!req.file) return res.status(400).json({ erro: 'Archivo no enviado' });
+  const ext = path.extname(req.file.originalname || '').slice(0, 10) || '.bin';
+  const filename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
+  saveFile(filename, req.file.mimetype, req.file.buffer);
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), req.file.buffer);
   const txId = req.body.transaction_id ? num(req.body.transaction_id) : null;
   const r = run(
     'INSERT INTO attachments (nome_arquivo, mimetype, tamanho, caminho, transaction_id, whatsapp_message_id, criado_em) VALUES (?,?,?,?,?,?,?)',
-    req.file.originalname, req.file.mimetype, req.file.size, req.file.filename, txId, null, nowIso()
+    req.file.originalname, req.file.mimetype, req.file.size, filename, txId, null, nowIso()
   );
   res.status(201).json(get('SELECT * FROM attachments WHERE id = ?', Number(r.lastInsertRowid)));
 });
@@ -703,6 +700,7 @@ api.delete('/attachments/:id', (req, res) => {
     const p = path.join(UPLOAD_DIR, a.caminho);
     if (fs.existsSync(p) && !a.caminho.includes('recibo-') && !a.caminho.includes('comprovante-') && !a.caminho.includes('audio-recado')) {
       fs.unlinkSync(p);
+      run('DELETE FROM files WHERE nome = ?', a.caminho);
     }
     run('DELETE FROM attachments WHERE id = ?', a.id);
   }

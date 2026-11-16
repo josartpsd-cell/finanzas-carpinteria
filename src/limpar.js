@@ -28,6 +28,7 @@ try {
   db.exec('DELETE FROM transactions');
   db.exec('DELETE FROM sales');
   db.exec("DELETE FROM sqlite_sequence WHERE name IN ('attachments','whatsapp_messages','transactions','sales')");
+  db.exec("DELETE FROM files WHERE nome NOT IN ('recibo-madeireira.svg','recibo-ferragens.svg','comprovante-pix.svg','audio-recado.wav')");
   db.exec('COMMIT');
 } catch (e) {
   db.exec('ROLLBACK');

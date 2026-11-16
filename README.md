@@ -15,7 +15,7 @@ Abre http://localhost:4173 en el navegador. La contraseña inicial es `carpinter
 
 Para desarrollo con recarga automática: `npm run dev`.
 
-Para publicar en internet, consulta `DEPLOY.md`.
+Para publicar en internet, consulta `DEPLOY.md`. Para guardar los datos fuera del servidor, define las variables opcionales `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN` (Turso, gratis); sin ellas la app usa la base SQLite local.
 
 ## Pantallas
 

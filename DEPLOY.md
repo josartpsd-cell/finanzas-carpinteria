@@ -116,6 +116,19 @@ Limitaciones del compartido: sin procesos en segundo plano, sin control de puert
 | `APP_PASSWORD` | Contraseña inicial | `carpinteria2026` |
 | `DATA_DIR` | Carpeta de la base SQLite | `./data` |
 | `UPLOAD_DIR` | Carpeta de comprobantes | `./uploads` |
+| `TURSO_DATABASE_URL` | URL `libsql://` de la base remota (opcional) | vacío |
+| `TURSO_AUTH_TOKEN` | Token de la base remota (opcional) | vacío |
+
+## Datos persistentes con Turso (gratis)
+
+En el plan gratuito de Render el disco se borra en cada despliegue. Con Turso la base y los comprobantes quedan fuera del servidor:
+
+1. Entra en https://turso.tech con tu cuenta de GitHub.
+2. Crea una base de datos y copia la URL que empieza con `libsql://`.
+3. Crea un token de acceso para esa base.
+4. En Render → **Environment**, define `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`.
+
+Con esas dos variables la app abre una réplica local en `DATA_DIR/replica.db`, sincroniza con Turso al arrancar y envía cada escritura al servidor remoto. Sin ellas sigue usando el archivo SQLite local como siempre.
 
 ## Respaldo en producción
 

@@ -1,6 +1,7 @@
 import express from 'express';
+import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, UPLOAD_DIR, isSeeded } from './src/db.js';
+import { ROOT, UPLOAD_DIR, getFile, isSeeded } from './src/db.js';
 import { seed } from './src/seed.js';
 import { api } from './src/api.js';
 import { authApi, requireAuth, garantirSenhaInicial } from './src/auth.js';
@@ -25,6 +26,19 @@ app.use(requireAuth);
 app.use('/api', authApi);
 app.use('/api', api);
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '1h' }));
+app.get('/uploads/:nome', (req, res) => {
+  const nome = req.params.nome;
+  if (nome.includes('/') || nome.includes('..')) return res.status(404).end();
+  const row = getFile(nome);
+  if (!row) return res.status(404).end();
+  const conteudo = Buffer.from(row.conteudo);
+  try {
+    fs.writeFileSync(path.join(UPLOAD_DIR, nome), conteudo);
+  } catch {}
+  res.set('Content-Type', row.mimetype || 'application/octet-stream');
+  res.set('Cache-Control', 'max-age=3600');
+  res.send(conteudo);
+});
 app.use(express.static(path.join(ROOT, 'public'), { extensions: ['html'] }));
 
 app.get('/login', (req, res) => {

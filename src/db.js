@@ -11,10 +11,24 @@ export const UPLOAD_DIR = process.env.UPLOAD_DIR ? path.resolve(process.env.UPLO
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-export const db = new DatabaseSync(path.join(DATA_DIR, 'financas.db'));
+export const REMOTE = !!process.env.TURSO_DATABASE_URL;
 
-db.exec('PRAGMA journal_mode = WAL');
-db.exec('PRAGMA foreign_keys = ON');
+export const db = REMOTE
+  ? await (async () => {
+      const { default: Database } = await import('libsql');
+      const conn = new Database(path.join(DATA_DIR, 'replica.db'), {
+        syncUrl: process.env.TURSO_DATABASE_URL,
+        authToken: process.env.TURSO_AUTH_TOKEN,
+      });
+      await conn.sync();
+      return conn;
+    })()
+  : new DatabaseSync(path.join(DATA_DIR, 'financas.db'));
+
+if (!REMOTE) db.exec('PRAGMA journal_mode = WAL');
+try {
+  db.exec('PRAGMA foreign_keys = ON');
+} catch {}
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS accounts (
@@ -109,6 +123,13 @@ CREATE TABLE IF NOT EXISTS settings (
   valor TEXT
 );
 
+CREATE TABLE IF NOT EXISTS files (
+  nome      TEXT PRIMARY KEY,
+  mimetype  TEXT,
+  conteudo  BLOB NOT NULL,
+  criado_em TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_tx_data ON transactions(data);
 CREATE INDEX IF NOT EXISTS idx_tx_entidade ON transactions(entidade);
 CREATE INDEX IF NOT EXISTS idx_tx_conta ON transactions(conta_id);
@@ -117,9 +138,26 @@ CREATE INDEX IF NOT EXISTS idx_wa_enviado ON whatsapp_messages(enviado_em);
 
 export const all = (sql, ...params) => db.prepare(sql).all(...params);
 export const get = (sql, ...params) => db.prepare(sql).get(...params);
-export const run = (sql, ...params) => db.prepare(sql).run(...params);
+export const run = (sql, ...params) => {
+  const r = db.prepare(sql).run(...params);
+  return { lastInsertRowid: Number(r.lastInsertRowid), changes: Number(r.changes) };
+};
 
 export const nowIso = () => new Date().toISOString();
+
+export function saveFile(nome, mimetype, buffer) {
+  run(
+    'INSERT OR REPLACE INTO files (nome, mimetype, conteudo, criado_em) VALUES (?,?,?,?)',
+    nome,
+    mimetype || null,
+    buffer,
+    nowIso()
+  );
+}
+
+export function getFile(nome) {
+  return get('SELECT * FROM files WHERE nome = ?', nome);
+}
 
 export function getSetting(chave, fallback = null) {
   const row = get('SELECT valor FROM settings WHERE chave = ?', chave);

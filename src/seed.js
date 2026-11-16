@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { db, run, get, all, nowIso, setSetting, UPLOAD_DIR, isSeeded } from './db.js';
+import { db, run, get, all, nowIso, setSetting, saveFile, UPLOAD_DIR, isSeeded } from './db.js';
 
 function mulberry32(a) {
   return function () {
@@ -121,7 +121,7 @@ function wavSilencioso(segundos = 3) {
 export function seed({ force = false } = {}) {
   if (isSeeded() && !force) return false;
   if (force) {
-    for (const t of ['attachments', 'whatsapp_messages', 'transactions', 'sales', 'categories', 'accounts', 'people', 'settings']) {
+    for (const t of ['attachments', 'whatsapp_messages', 'transactions', 'sales', 'categories', 'accounts', 'people', 'settings', 'files']) {
       db.exec(`DELETE FROM ${t}`);
     }
     db.exec("DELETE FROM sqlite_sequence WHERE name IN ('attachments','whatsapp_messages','transactions','sales','categories','accounts','people')");
@@ -513,6 +513,11 @@ export function seed({ force = false } = {}) {
   fs.writeFileSync(path.join(UPLOAD_DIR, 'recibo-ferragens.svg'), recibo2);
   fs.writeFileSync(path.join(UPLOAD_DIR, 'comprovante-pix.svg'), recibo3);
   fs.writeFileSync(path.join(UPLOAD_DIR, 'audio-recado.wav'), wavSilencioso(4));
+
+  saveFile('recibo-madeireira.svg', 'image/svg+xml', Buffer.from(recibo1));
+  saveFile('recibo-ferragens.svg', 'image/svg+xml', Buffer.from(recibo2));
+  saveFile('comprovante-pix.svg', 'image/svg+xml', Buffer.from(recibo3));
+  saveFile('audio-recado.wav', 'audio/wav', wavSilencioso(4));
 
   const txMdf = get("SELECT id FROM transactions WHERE descricao LIKE 'Tableros de MDF%' AND status = 'pago' ORDER BY data DESC LIMIT 1");
   const txFerragem = get("SELECT id FROM transactions WHERE categoria_id = ? ORDER BY data DESC LIMIT 1", cat('Herrajes y accesorios'));
