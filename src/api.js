@@ -753,6 +753,24 @@ api.get('/export/balanco.csv', (req, res) => {
   res.send(csv);
 });
 
+api.get('/export/backup.json', (req, res) => {
+  const dados = {
+    gerado_em: nowIso(),
+    versao: 1,
+    accounts: all('SELECT * FROM accounts'),
+    categories: all('SELECT * FROM categories'),
+    people: all('SELECT * FROM people'),
+    sales: all('SELECT * FROM sales'),
+    transactions: all('SELECT * FROM transactions'),
+    attachments: all('SELECT * FROM attachments'),
+    whatsapp_messages: all('SELECT * FROM whatsapp_messages'),
+    settings: all("SELECT chave, valor FROM settings WHERE chave NOT IN ('senha_hash','sessao_segredo')"),
+  };
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="respaldo-${new Date().toISOString().slice(0, 10)}.json"`);
+  res.send(JSON.stringify(dados, null, 2));
+});
+
 api.use((err, req, res, next) => {
   res.status(500).json({ erro: err.message || 'Error interno' });
 });

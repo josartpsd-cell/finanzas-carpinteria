@@ -1009,6 +1009,13 @@ async function renderContas() {
           </div>
         </div>
         <div class="card">
+          <div class="card-head"><h3>Respaldo</h3><span class="hint">copia de seguridad</span></div>
+          <div class="stack">
+            <p class="card-sub" style="margin:0">Descarga todos los movimientos, ventas, cuentas y mensajes en un archivo JSON. Guárdalo fuera del servidor.</p>
+            <a class="btn btn-sm" href="/api/export/backup.json">${icon('download')} Descargar respaldo</a>
+          </div>
+        </div>
+        <div class="card">
           <div class="card-head"><h3>Seguridad</h3><span class="hint">acceso al sistema</span></div>
           <div class="stack">
             <div class="field"><label>Contraseña actual</label><input type="password" id="senha-atual" autocomplete="current-password"></div>
