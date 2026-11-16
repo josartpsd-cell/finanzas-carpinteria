@@ -8,6 +8,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "publicar": "node scripts/publicar.mjs",
+    "limpar": "node src/limpar.js",
     "seed": "node src/seed-cli.js"
   },
   "dependencies": {
