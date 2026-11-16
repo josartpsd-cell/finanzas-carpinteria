@@ -58,11 +58,27 @@ const nomeMesCurto = (mes) => {
 };
 
 async function api(path, opts = {}) {
-  const res = await fetch(`/api${path}`, {
-    headers: opts.body && !(opts.body instanceof FormData) ? { 'Content-Type': 'application/json' } : undefined,
-    ...opts,
-    body: opts.body && !(opts.body instanceof FormData) ? JSON.stringify(opts.body) : opts.body,
-  });
+  const enviar = () =>
+    fetch(`/api${path}`, {
+      headers: opts.body && !(opts.body instanceof FormData) ? { 'Content-Type': 'application/json' } : undefined,
+      ...opts,
+      body: opts.body && !(opts.body instanceof FormData) ? JSON.stringify(opts.body) : opts.body,
+    });
+
+  let res;
+  let ultimoErro;
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    try {
+      res = await enviar();
+      if (![502, 503, 504].includes(res.status)) break;
+      ultimoErro = new Error('El servidor está despertando. Intenta de nuevo en unos segundos.');
+    } catch (e) {
+      ultimoErro = e;
+    }
+    if (tentativa < 2) await new Promise((r) => setTimeout(r, 1500 * (tentativa + 1)));
+  }
+  if (!res) throw ultimoErro || new Error('Sin conexión con el servidor');
+
   const txt = await res.text();
   let data = null;
   try {
@@ -216,7 +232,7 @@ async function render() {
     view.innerHTML = await route.render();
     AFTER[page]?.();
   } catch (e) {
-    view.innerHTML = `<div class="card"><div class="empty"><strong>No se pudo cargar</strong>${esc(e.message)}</div></div>`;
+    view.innerHTML = `<div class="card"><div class="empty"><strong>No se pudo cargar</strong>${esc(e.message)}<div style="margin-top:12px"><button class="btn btn-sm" onclick="location.reload()">Reintentar</button></div></div></div>`;
   }
 }
 
