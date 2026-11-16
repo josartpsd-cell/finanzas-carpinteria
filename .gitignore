@@ -6,3 +6,10 @@ uploads/
 public-url.txt
 publicacao.log
 render-service.json
+owners.json
+svc.json
+gh-user.json
+gh-repo.json
+gh-pub.json
+gh-headers.txt
+ck.txt
