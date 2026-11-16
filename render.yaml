@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: finanzas-carpinteria
+    runtime: node
+    plan: starter
+    buildCommand: npm install --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_VERSION
+        value: 22.16.0
+      - key: DATA_DIR
+        value: /var/data
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: APP_PASSWORD
+        sync: false
+    disk:
+      name: datos
+      mountPath: /var/data
+      sizeGB: 1

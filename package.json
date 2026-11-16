@@ -1,0 +1,19 @@
+{
+  "name": "financas-marcenaria",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Gestao financeira pessoal e da marcenaria - painel, lancamentos, vendas, balanco e WhatsApp",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "seed": "node src/seed-cli.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^2.5.0"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

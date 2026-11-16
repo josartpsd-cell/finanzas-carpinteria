@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finanzas — Carpintería</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Cpath d='M8 23V9h4l4 6 4-6h4v14h-4v-8l-4 6-4-6v8z' fill='%23fff'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div class="brand-text">
+        <strong id="brand-nome">Carpintería</strong>
+        <span>Gestión financiera</span>
+      </div>
+    </div>
+    <nav id="nav" class="nav"></nav>
+    <div class="sidebar-foot">
+      <div class="mini-card">
+        <div class="mini-card-top">
+          <span class="dot" id="wa-dot"></span>
+          <span>WhatsApp</span>
+        </div>
+        <strong id="wa-status">Desconectado</strong>
+        <a href="#/whatsapp">Configurar conexión</a>
+      </div>
+      <p class="sidebar-note">Datos guardados en tu computadora</p>
+      <button class="btn btn-sm btn-ghost sidebar-exit" id="btn-sair" type="button">Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 id="page-title">Panel</h1>
+        <p id="page-sub"></p>
+      </div>
+      <div class="topbar-right">
+        <div class="month-picker" id="month-picker">
+          <button type="button" id="mes-prev" aria-label="Mes anterior">&#8249;</button>
+          <input type="month" id="mes-input" aria-label="Mes de referencia">
+          <button type="button" id="mes-next" aria-label="Mes siguiente">&#8250;</button>
+        </div>
+        <button class="btn btn-primary" id="btn-novo" type="button">
+          <span class="plus">+</span> Nuevo movimiento
+        </button>
+      </div>
+    </header>
+    <main id="view" class="view"></main>
+  </div>
+</div>
+<div id="modal-root"></div>
+<div id="toast-root" class="toast-root"></div>
+<script src="/app.js" type="module"></script>
+</body>
+</html>
