@@ -173,6 +173,6 @@ export function setSetting(chave, valor) {
 }
 
 export function isSeeded() {
-  const row = get('SELECT COUNT(*) AS n FROM transactions');
+  const row = get('SELECT COUNT(*) AS n FROM accounts');
   return row.n > 0;
 }
