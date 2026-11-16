@@ -3,3 +3,6 @@ data/
 uploads/
 *.log
 .env
+public-url.txt
+publicacao.log
+render-service.json

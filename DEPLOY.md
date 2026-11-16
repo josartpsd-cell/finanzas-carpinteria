@@ -46,10 +46,23 @@ Detrás de un proxy con HTTPS (Caddy, Nginx, Traefik), la cookie de sesión se m
 Sin cuenta y sin servidor, mientras la computadora esté encendida:
 
 ```bash
-cloudflared tunnel --url http://localhost:4173
+npm run publicar
 ```
 
-Genera una URL `https://algo.trycloudflare.com` válida mientras el túnel siga abierto. Sirve para que tu hermano pruebe el sistema, no para uso permanente: la URL cambia cada vez y no hay garantía de disponibilidad.
+Levanta el servidor y el túnel juntos, reinicia cualquiera de los dos si se cae y escribe la URL pública en `public-url.txt`. El registro queda en `publicacao.log`.
+
+Genera una URL `https://algo.trycloudflare.com` válida mientras el proceso siga abierto. Sirve para que tu hermano pruebe el sistema, no para uso permanente: la URL cambia cada vez y no hay garantía de disponibilidad.
+
+## Opción 5 — Script de despliegue en Render
+
+Con una API key de Render y el repositorio ya en GitHub:
+
+```bash
+RENDER_API_KEY=rnd_xxx GITHUB_REPO=usuario/finanzas-carpinteria APP_PASSWORD=tu_contraseña \
+  node scripts/deploy-render.mjs
+```
+
+Crea el servicio web con disco de 1 GB en `/var/data`, variables de entorno y health check en `/login`. Grava o id do serviço e a URL em `render-service.json`.
 
 ## Variables de entorno
 
