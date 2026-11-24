@@ -72,12 +72,27 @@ function pendentes() {
     `SELECT
        ROUND(COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor END), 0), 2) AS a_receber,
        ROUND(COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN valor END), 0), 2) AS a_pagar,
-       SUM(CASE WHEN tipo = 'receita' THEN 1 ELSE 0 END) AS qtd_receber,
-       SUM(CASE WHEN tipo = 'despesa' THEN 1 ELSE 0 END) AS qtd_pagar,
+       COALESCE(SUM(CASE WHEN tipo = 'receita' THEN 1 ELSE 0 END), 0) AS qtd_receber,
+       COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN 1 ELSE 0 END), 0) AS qtd_pagar,
        COUNT(*) AS qtd
      FROM transactions WHERE status = 'pendente'`
   );
-  return r;
+  const vendas = get(
+    `SELECT
+       ROUND(COALESCE(SUM(saldo), 0), 2) AS a_receber,
+       COUNT(*) AS qtd
+     FROM (
+       SELECT s.valor - COALESCE((SELECT SUM(t.valor) FROM transactions t WHERE t.venda_id = s.id AND t.tipo = 'receita'), 0) AS saldo
+       FROM sales s
+     ) WHERE saldo > 0.005`
+  );
+  return {
+    a_receber: round2(r.a_receber + vendas.a_receber),
+    a_pagar: round2(r.a_pagar),
+    qtd_receber: r.qtd_receber + vendas.qtd,
+    qtd_pagar: r.qtd_pagar,
+    qtd: r.qtd,
+  };
 }
 
 api.get('/bootstrap', (req, res) => {
