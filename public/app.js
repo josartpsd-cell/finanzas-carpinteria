@@ -664,12 +664,11 @@ async function renderVendas() {
   if (filtrosVenda.status) qs.set('status', filtrosVenda.status);
   const d = await api(`/sales?${qs}`);
   const r = d.resumo;
-  const ticket = r.qtd ? r.valor / r.qtd : 0;
   const margemPct = r.valor ? (r.margem / r.valor) * 100 : 0;
 
   const linhas = d.itens
     .map((s) => {
-      const margem = s.valor - s.custo;
+      const margem = s.margem;
       return `<tr>
         <td class="nowrap">${fmtDate(s.data)}</td>
         <td><span class="desc">${esc(s.descricao)}</span><div class="meta">${esc(s.cliente || 'Sin cliente')}</div></td>
@@ -677,9 +676,11 @@ async function renderVendas() {
         <td class="num">${fmt(s.valor)}</td>
         <td class="num muted">${fmt(s.custo)}</td>
         <td class="num ${margem >= 0 ? 'pos-text' : 'neg-text'}">${fmt(margem)}</td>
+        <td class="num">${fmt(s.recebido)}</td>
+        <td class="num ${s.saldo > 0 ? 'neg-text' : 'muted'}">${fmt(s.saldo)}</td>
         <td><span class="tag ${s.status === 'pago' ? 'pago' : 'pendente'}">${STATUS_VENDA[s.status] || s.status}</span></td>
         <td class="actions">
-          ${s.status !== 'pago' ? `<button class="btn btn-sm" data-receber="${s.id}" title="Registrar cobro">${icon('check')}</button>` : ''}
+          ${s.saldo > 0 ? `<button class="btn btn-sm" data-receber="${s.id}" title="Registrar cobro">${icon('check')}</button>` : ''}
           <button class="btn btn-sm btn-ghost" data-editv="${s.id}" title="Editar">${icon('edit')}</button>
           <button class="btn btn-sm btn-ghost" data-delv="${s.id}" title="Eliminar">${icon('trash')}</button>
         </td>
@@ -692,7 +693,15 @@ async function renderVendas() {
       <div class="card kpi"><span class="label">Facturación</span><span class="value">${fmt(r.valor)}</span><span class="foot">${r.qtd} venta(s) · ${r.servicos} servicio(s) · ${r.produtos} mueble(s)</span></div>
       <div class="card kpi"><span class="label">Costo de materiales</span><span class="value sm">${fmt(r.custo)}</span><span class="foot">${pct(r.valor ? (r.custo / r.valor) * 100 : 0)} de lo facturado</span></div>
       <div class="card kpi pos"><span class="label">Margen bruto</span><span class="value sm">${fmt(r.margem)}</span><span class="foot">${pct(margemPct)} de margen</span></div>
-      <div class="card kpi"><span class="label">Ticket promedio</span><span class="value sm">${fmt(ticket)}</span><span class="foot">${fmt(r.recebido)} ya cobrado</span></div>
+      <div class="card kpi ${r.a_receber > 0 ? 'neg' : ''}"><span class="label">Por cobrar</span><span class="value sm">${fmt(r.a_receber)}</span><span class="foot">${fmt(r.recebido)} ya cobrado</span></div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-head"><h3>Reparto de la ganancia</h3><span class="hint">Margen bruto ${fmt(r.margem)}</span></div>
+      <div class="grid g-2">
+        <div class="row between" style="padding:6px 0"><span>Negocio</span><strong class="pos-text">${fmt(r.parte_negocio)}</strong></div>
+        <div class="row between" style="padding:6px 0"><span>Socio/a</span><strong class="pos-text">${fmt(r.parte_socio)}</strong></div>
+      </div>
     </div>
 
     <div class="filters">
@@ -713,8 +722,8 @@ async function renderVendas() {
       <div class="card-head"><h3>Ventas de ${nomeMes(state.mes)}</h3><span class="hint">${r.qtd} registro(s)</span></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Descripción</th><th>Tipo</th><th class="num">Valor</th><th class="num">Costo</th><th class="num">Margen</th><th>Estado</th><th></th></tr></thead>
-          <tbody>${linhas || '<tr><td colspan="8"><div class="empty"><strong>Ninguna venta en el mes</strong>Registra un servicio o la venta de un mueble listo.</div></td></tr>'}</tbody>
+          <thead><tr><th>Fecha</th><th>Descripción</th><th>Tipo</th><th class="num">Valor</th><th class="num">Costo</th><th class="num">Margen</th><th class="num">Cobrado</th><th class="num">Saldo</th><th>Estado</th><th></th></tr></thead>
+          <tbody>${linhas || '<tr><td colspan="10"><div class="empty"><strong>Ninguna venta en el mes</strong>Registra un servicio o la venta de un mueble listo.</div></td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -738,16 +747,50 @@ function afterVendas() {
     })
   );
   $$('[data-receber]').forEach((b) =>
-    b.addEventListener('click', async () => {
-      try {
-        await api(`/sales/${b.dataset.receber}/receber`, { method: 'POST', body: {} });
-        toast('Cobro registrado en la cuenta de la empresa');
-        render();
-      } catch (e) {
-        toast(e.message, 'err');
-      }
-    })
+    b.addEventListener('click', () => abrirCobroVenda(Number(b.dataset.receber)))
   );
+}
+
+async function abrirCobroVenda(id) {
+  const [d, contas] = await Promise.all([api(`/sales?mes=${state.mes}`), api('/accounts')]);
+  const venda = d.itens.find((s) => s.id === id);
+  if (!venda) return toast('Venta no encontrada', 'err');
+  const contasEmpresa = contas.filter((c) => c.entidade === 'empresa' && c.ativo);
+  openModal({
+    titulo: 'Registrar cobro',
+    body: `
+      <form id="form-cobro" class="form-grid">
+        <div class="field span-2"><label>Venta</label><input type="text" value="${esc(venda.descricao)}" disabled></div>
+        <div class="field"><label>Valor total (R$)</label><input type="text" value="${fmt(venda.valor)}" disabled></div>
+        <div class="field"><label>Saldo pendiente (R$)</label><input type="text" value="${fmt(venda.saldo)}" disabled></div>
+        <div class="field"><label>Valor del cobro (R$)</label><input type="number" name="valor" step="0.01" min="0.01" max="${venda.saldo}" value="${venda.saldo}" required></div>
+        <div class="field"><label>Fecha</label><input type="date" name="data" value="${new Date().toISOString().slice(0, 10)}" required></div>
+        <div class="field"><label>Cuenta</label>
+          <select name="conta_id">${contasEmpresa.map((c) => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Forma de pago</label>
+          <select name="forma_pagamento">${[['pix', 'Pix'], ['dinheiro', 'Efectivo'], ['debito', 'Débito'], ['credito', 'Crédito'], ['boleto', 'Boleto'], ['transferencia', 'Transferencia']]
+            .map(([f, label]) => `<option value="${f}" ${venda.forma_pagamento === f ? 'selected' : ''}>${label}</option>`).join('')}</select>
+        </div>
+      </form>`,
+    footer: `<button class="btn" type="button" data-close>Cancelar</button><button class="btn btn-primary" type="submit" form="form-cobro">Registrar cobro</button>`,
+    onMount(root) {
+      root.querySelector('#form-cobro').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = Object.fromEntries(new FormData(e.target).entries());
+        payload.valor = Number(payload.valor);
+        payload.conta_id = Number(payload.conta_id);
+        try {
+          const res = await api(`/sales/${id}/receber`, { method: 'POST', body: payload });
+          closeModal();
+          toast(res.saldo > 0 ? `Cobro registrado. Saldo: ${fmt(res.saldo)}` : 'Venta cobrada por completo');
+          render();
+        } catch (err) {
+          toast(err.message, 'err');
+        }
+      });
+    },
+  });
 }
 
 async function abrirFormVenda(id) {
@@ -774,6 +817,7 @@ async function abrirFormVenda(id) {
         </div>
         <div class="field"><label>Valor cobrado (R$)</label><input type="number" name="valor" step="0.01" min="0" value="${s.valor}" required></div>
         <div class="field"><label>Costo de material (R$)</label><input type="number" name="custo" step="0.01" min="0" value="${s.custo}"></div>
+        <div class="field"><label>Reparto del negocio (%)</label><input type="number" name="percentual_negocio" step="1" min="0" max="100" value="${s.percentual_negocio ?? 60}"></div>
         <div class="field"><label>Forma de pago</label>
           <select name="forma_pagamento">${[['pix', 'Pix'], ['dinheiro', 'Efectivo'], ['debito', 'Débito'], ['credito', 'Crédito'], ['boleto', 'Boleto'], ['transferencia', 'Transferencia']]
             .map(([f, label]) => `<option value="${f}" ${s.forma_pagamento === f ? 'selected' : ''}>${label}</option>`).join('')}</select>
@@ -788,6 +832,7 @@ async function abrirFormVenda(id) {
         const payload = Object.fromEntries(fd.entries());
         payload.valor = Number(payload.valor);
         payload.custo = Number(payload.custo) || 0;
+        payload.percentual_negocio = Number(payload.percentual_negocio);
         try {
           if (id) await api(`/sales/${id}`, { method: 'PUT', body: payload });
           else await api('/sales', { method: 'POST', body: payload });
@@ -989,6 +1034,7 @@ async function renderContas() {
           <div class="card-head"><h3>Identidad</h3></div>
           <div class="stack">
             <div class="field"><label>Nombre del negocio</label><input id="cfg-empresa" value="${esc(cfg.empresa_nome || 'Carpintería')}"></div>
+            <div class="field"><label>Reparto del negocio (%)</label><input id="cfg-divisao" type="number" min="0" max="100" step="1" value="${esc(cfg.divisao_negocio || '60')}"><span class="hint">El resto es la ganancia del socio/a</span></div>
             ${pessoas
               .map(
                 (p) => `<div class="form-grid">
@@ -1085,7 +1131,7 @@ function afterContas() {
   });
   $('#salvar-identidade')?.addEventListener('click', async () => {
     try {
-      await api('/settings', { method: 'PUT', body: { empresa_nome: $('#cfg-empresa').value } });
+      await api('/settings', { method: 'PUT', body: { empresa_nome: $('#cfg-empresa').value, divisao_negocio: Number($('#cfg-divisao').value) } });
       for (const inp of $$('[data-pessoa]')) {
         const id = inp.dataset.pessoa;
         const nome = $(`[data-pessoa="${id}"][data-campo="nome"]`).value;

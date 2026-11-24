@@ -13,6 +13,11 @@ const num = (v, def = 0) => {
   return Number.isFinite(n) ? n : def;
 };
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const pctNegocio = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return 60;
+  return Math.round(n * 100) / 100;
+};
 const ENTIDADES = ['pessoal', 'empresa'];
 const TIPOS = ['receita', 'despesa', 'transferencia'];
 
@@ -477,22 +482,38 @@ api.get('/sales', (req, res) => {
     params.push(req.query.status);
   }
   const itens = all(
-    `SELECT s.*, (SELECT COUNT(*) FROM transactions t WHERE t.venda_id = s.id) AS lancamentos
+    `SELECT s.*,
+       (SELECT COUNT(*) FROM transactions t WHERE t.venda_id = s.id) AS lancamentos,
+       (SELECT COALESCE(SUM(t.valor), 0) FROM transactions t WHERE t.venda_id = s.id AND t.tipo = 'receita') AS recebido
      FROM sales s ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
      ORDER BY s.data DESC, s.id DESC LIMIT 300`,
     ...params
-  );
+  ).map((s) => {
+    const recebido = round2(s.recebido || 0);
+    const margem = round2(s.valor - s.custo);
+    const pctNegocio = s.percentual_negocio == null ? 60 : s.percentual_negocio;
+    return {
+      ...s,
+      recebido,
+      saldo: round2(s.valor - recebido),
+      margem,
+      parte_negocio: round2((margem * pctNegocio) / 100),
+      parte_socio: round2(margem - (margem * pctNegocio) / 100),
+    };
+  });
   const resumo = itens.reduce(
     (acc, s) => {
       acc.valor += s.valor;
       acc.custo += s.custo;
+      acc.recebido += s.recebido;
+      acc.parte_negocio += s.parte_negocio;
+      acc.parte_socio += s.parte_socio;
       acc.qtd += 1;
       if (s.tipo === 'servico') acc.servicos += 1;
       if (s.tipo === 'produto') acc.produtos += 1;
-      if (s.status === 'pago') acc.recebido += s.valor;
       return acc;
     },
-    { valor: 0, custo: 0, qtd: 0, servicos: 0, produtos: 0, recebido: 0 }
+    { valor: 0, custo: 0, recebido: 0, parte_negocio: 0, parte_socio: 0, qtd: 0, servicos: 0, produtos: 0 }
   );
   res.json({
     itens,
@@ -500,10 +521,13 @@ api.get('/sales', (req, res) => {
       valor: round2(resumo.valor),
       custo: round2(resumo.custo),
       margem: round2(resumo.valor - resumo.custo),
+      recebido: round2(resumo.recebido),
+      a_receber: round2(resumo.valor - resumo.recebido),
+      parte_negocio: round2(resumo.parte_negocio),
+      parte_socio: round2(resumo.parte_socio),
       qtd: resumo.qtd,
       servicos: resumo.servicos,
       produtos: resumo.produtos,
-      recebido: round2(resumo.recebido),
     },
   });
 });
@@ -512,13 +536,14 @@ api.post('/sales', (req, res) => {
   const b = req.body || {};
   if (!b.descricao) return res.status(400).json({ erro: 'La descripción es obligatoria' });
   const r = run(
-    `INSERT INTO sales (data, tipo, cliente, descricao, valor, custo, status, forma_pagamento, observacoes, criado_em)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO sales (data, tipo, cliente, descricao, valor, custo, status, forma_pagamento, observacoes, percentual_negocio, criado_em)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
     String(b.data || new Date().toISOString().slice(0, 10)).slice(0, 10),
     b.tipo === 'produto' ? 'produto' : 'servico',
     b.cliente || null, String(b.descricao).slice(0, 200),
     round2(num(b.valor)), round2(num(b.custo)),
-    b.status || 'orcamento', b.forma_pagamento || 'pix', b.observacoes || null, nowIso()
+    b.status || 'orcamento', b.forma_pagamento || 'pix', b.observacoes || null,
+    pctNegocio(b.percentual_negocio), nowIso()
   );
   res.status(201).json(get('SELECT * FROM sales WHERE id = ?', Number(r.lastInsertRowid)));
 });
@@ -527,12 +552,13 @@ api.put('/sales/:id', (req, res) => {
   const b = req.body || {};
   const id = num(req.params.id);
   run(
-    `UPDATE sales SET data=?, tipo=?, cliente=?, descricao=?, valor=?, custo=?, status=?, forma_pagamento=?, observacoes=? WHERE id=?`,
+    `UPDATE sales SET data=?, tipo=?, cliente=?, descricao=?, valor=?, custo=?, status=?, forma_pagamento=?, observacoes=?, percentual_negocio=? WHERE id=?`,
     String(b.data || new Date().toISOString().slice(0, 10)).slice(0, 10),
     b.tipo === 'produto' ? 'produto' : 'servico',
     b.cliente || null, String(b.descricao || '').slice(0, 200),
     round2(num(b.valor)), round2(num(b.custo)),
-    b.status || 'orcamento', b.forma_pagamento || 'pix', b.observacoes || null, id
+    b.status || 'orcamento', b.forma_pagamento || 'pix', b.observacoes || null,
+    pctNegocio(b.percentual_negocio), id
   );
   res.json(get('SELECT * FROM sales WHERE id = ?', id));
 });
@@ -553,17 +579,33 @@ api.post('/sales/:id/receber', (req, res) => {
     "SELECT id FROM categories WHERE tipo = 'receita' AND entidade = 'empresa' AND nome = ?",
     venda.tipo === 'produto' ? 'Muebles listos (reventa)' : 'Muebles a medida'
   );
+  const jaRecebido = round2(
+    get("SELECT COALESCE(SUM(valor), 0) AS s FROM transactions WHERE venda_id = ? AND tipo = 'receita'", id).s
+  );
+  const saldo = round2(venda.valor - jaRecebido);
+  if (saldo <= 0) return res.status(400).json({ erro: 'Esta venta ya está cobrada por completo' });
+  const valor = round2(num(b.valor) || saldo);
+  if (valor <= 0) return res.status(400).json({ erro: 'El valor del cobro debe ser mayor que cero' });
+  if (valor > saldo + 0.005) return res.status(400).json({ erro: `El saldo pendiente es ${saldo.toFixed(2)}` });
   const r = run(
     `INSERT INTO transactions (data, tipo, valor, entidade, conta_id, categoria_id, pessoa_id, descricao, forma_pagamento, status, origem, venda_id, criado_em)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     String(b.data || new Date().toISOString().slice(0, 10)).slice(0, 10),
-    'receita', round2(num(b.valor) || venda.valor), 'empresa', contaId, cat?.id ?? null,
+    'receita', valor, 'empresa', contaId, cat?.id ?? null,
     b.pessoa_id ? num(b.pessoa_id) : null,
     `${venda.descricao}${venda.cliente ? ' — ' + venda.cliente : ''}`,
     b.forma_pagamento || venda.forma_pagamento || 'pix', 'pago', 'venda', id, nowIso()
   );
-  run("UPDATE sales SET status = 'pago' WHERE id = ?", id);
-  res.status(201).json({ ok: true, transaction_id: Number(r.lastInsertRowid) });
+  const totalRecebido = round2(jaRecebido + valor);
+  const novoStatus = totalRecebido >= venda.valor - 0.005 ? 'pago' : venda.status === 'orcamento' ? 'aprovado' : venda.status;
+  run('UPDATE sales SET status = ? WHERE id = ?', novoStatus, id);
+  res.status(201).json({
+    ok: true,
+    transaction_id: Number(r.lastInsertRowid),
+    recebido: totalRecebido,
+    saldo: round2(venda.valor - totalRecebido),
+    status: novoStatus,
+  });
 });
 
 api.get('/whatsapp', (req, res) => {
@@ -657,21 +699,23 @@ api.post('/whatsapp/webhook', (req, res) => {
   res.status(201).json({ ok: true, id: Number(r.lastInsertRowid) });
 });
 
+const OCULTAS = ['senha_hash', 'sessao_segredo'];
+const settingsPublicos = () =>
+  Object.fromEntries(all('SELECT chave, valor FROM settings').filter((r) => !OCULTAS.includes(r.chave)).map((r) => [r.chave, r.valor]));
+
 api.get('/settings', (req, res) => {
-  const rows = all('SELECT chave, valor FROM settings');
-  res.json(Object.fromEntries(rows.map((r) => [r.chave, r.valor])));
+  res.json(settingsPublicos());
 });
 
 api.put('/settings', (req, res) => {
   const b = req.body || {};
   const permitidas = [
-    'empresa_nome', 'moeda', 'whatsapp_status', 'whatsapp_numero', 'whatsapp_provider', 'whatsapp_webhook_token',
+    'empresa_nome', 'moeda', 'divisao_negocio', 'whatsapp_status', 'whatsapp_numero', 'whatsapp_provider', 'whatsapp_webhook_token',
   ];
   for (const [k, v] of Object.entries(b)) {
-    if (permitidas.includes(k)) setSetting(k, v);
+    if (permitidas.includes(k)) setSetting(k, k === 'divisao_negocio' ? String(pctNegocio(v)) : v);
   }
-  const rows = all('SELECT chave, valor FROM settings');
-  res.json(Object.fromEntries(rows.map((r) => [r.chave, r.valor])));
+  res.json(settingsPublicos());
 });
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });

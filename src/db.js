@@ -143,6 +143,13 @@ export const run = (sql, ...params) => {
   return { lastInsertRowid: Number(r.lastInsertRowid), changes: Number(r.changes) };
 };
 
+function garantirColuna(tabela, coluna, definicao) {
+  const cols = db.prepare(`PRAGMA table_info(${tabela})`).all();
+  if (!cols.some((c) => c.name === coluna)) db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${definicao}`);
+}
+
+garantirColuna('sales', 'percentual_negocio', 'REAL NOT NULL DEFAULT 60');
+
 export const nowIso = () => new Date().toISOString();
 
 export function saveFile(nome, mimetype, buffer) {

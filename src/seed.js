@@ -554,6 +554,7 @@ export function seed({ force = false } = {}) {
 
   setSetting('empresa_nome', 'Carpintería');
   setSetting('moeda', 'BRL');
+  setSetting('divisao_negocio', '60');
   setSetting('whatsapp_status', 'desconectado');
   setSetting('whatsapp_numero', '');
   setSetting('whatsapp_provider', '');
