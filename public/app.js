@@ -665,6 +665,7 @@ async function renderVendas() {
   const d = await api(`/sales?${qs}`);
   const r = d.resumo;
   const margemPct = r.valor ? (r.margem / r.valor) * 100 : 0;
+  const pctNegocioResumo = r.margem ? (r.parte_negocio / r.margem) * 100 : Number(state.boot?.divisao_negocio || 60);
 
   const linhas = d.itens
     .map((s) => {
@@ -676,6 +677,7 @@ async function renderVendas() {
         <td class="num">${fmt(s.valor)}</td>
         <td class="num muted">${fmt(s.custo)}</td>
         <td class="num ${margem >= 0 ? 'pos-text' : 'neg-text'}">${fmt(margem)}</td>
+        <td class="num muted">${s.percentual_negocio ?? 60}/${100 - (s.percentual_negocio ?? 60)}</td>
         <td class="num">${fmt(s.recebido)}</td>
         <td class="num ${s.saldo > 0 ? 'neg-text' : 'muted'}">${fmt(s.saldo)}</td>
         <td><span class="tag ${s.status === 'pago' ? 'pago' : 'pendente'}">${STATUS_VENDA[s.status] || s.status}</span></td>
@@ -699,8 +701,8 @@ async function renderVendas() {
     <div class="card" style="margin-bottom:14px">
       <div class="card-head"><h3>Reparto de la ganancia</h3><span class="hint">Margen bruto ${fmt(r.margem)}</span></div>
       <div class="grid g-2">
-        <div class="row between" style="padding:6px 0"><span>Negocio</span><strong class="pos-text">${fmt(r.parte_negocio)}</strong></div>
-        <div class="row between" style="padding:6px 0"><span>Socio/a</span><strong class="pos-text">${fmt(r.parte_socio)}</strong></div>
+        <div class="row between" style="padding:6px 0"><span>Negocio <span class="muted">${pct(pctNegocioResumo)}</span></span><strong class="pos-text">${fmt(r.parte_negocio)}</strong></div>
+        <div class="row between" style="padding:6px 0"><span>Socio/a <span class="muted">${pct(100 - pctNegocioResumo)}</span></span><strong class="pos-text">${fmt(r.parte_socio)}</strong></div>
       </div>
     </div>
 
@@ -722,8 +724,8 @@ async function renderVendas() {
       <div class="card-head"><h3>Ventas de ${nomeMes(state.mes)}</h3><span class="hint">${r.qtd} registro(s)</span></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Descripción</th><th>Tipo</th><th class="num">Valor</th><th class="num">Costo</th><th class="num">Margen</th><th class="num">Cobrado</th><th class="num">Saldo</th><th>Estado</th><th></th></tr></thead>
-          <tbody>${linhas || '<tr><td colspan="10"><div class="empty"><strong>Ninguna venta en el mes</strong>Registra un servicio o la venta de un mueble listo.</div></td></tr>'}</tbody>
+          <thead><tr><th>Fecha</th><th>Descripción</th><th>Tipo</th><th class="num">Valor</th><th class="num">Costo</th><th class="num">Margen</th><th class="num">Reparto</th><th class="num">Cobrado</th><th class="num">Saldo</th><th>Estado</th><th></th></tr></thead>
+          <tbody>${linhas || '<tr><td colspan="11"><div class="empty"><strong>Ninguna venta en el mes</strong>Registra un servicio o la venta de un mueble listo.</div></td></tr>'}</tbody>
         </table>
       </div>
     </div>`;

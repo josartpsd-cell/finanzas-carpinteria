@@ -101,6 +101,7 @@ api.get('/bootstrap', (req, res) => {
     mes_atual: mesAtual(),
     empresa_nome: getSetting('empresa_nome', 'Carpintería'),
     moeda: getSetting('moeda', 'PYG'),
+    divisao_negocio: Number(getSetting('divisao_negocio', '60')),
     whatsapp: {
       status: getSetting('whatsapp_status', 'desconectado'),
       numero: getSetting('whatsapp_numero', ''),
