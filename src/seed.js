@@ -491,20 +491,20 @@ export function seed({ force = false } = {}) {
   );
 
   const recibo1 = svgRecibo('Recibo — Maderera Central', [
-    ['Tableros MDF 18mm (12 un.)', 'R$ 2.640,00'],
-    ['Tapacanto', 'R$ 180,00'],
-    ['Entrega', 'R$ 120,00'],
-    ['Total', 'R$ 2.940,00'],
+    ['Tableros MDF 18mm (12 un.)', '₲ 2.640,00'],
+    ['Tapacanto', '₲ 180,00'],
+    ['Entrega', '₲ 120,00'],
+    ['Total', '₲ 2.940,00'],
   ]);
   const recibo2 = svgRecibo('Factura — Herrajes Silva', [
-    ['Correderas 45cm (20 pares)', 'R$ 620,00'],
-    ['Bisagras (40 un.)', 'R$ 340,00'],
-    ['Tiradores', 'R$ 210,00'],
-    ['Total', 'R$ 1.170,00'],
+    ['Correderas 45cm (20 pares)', '₲ 620,00'],
+    ['Bisagras (40 un.)', '₲ 340,00'],
+    ['Tiradores', '₲ 210,00'],
+    ['Total', '₲ 1.170,00'],
   ], '#b45309');
   const recibo3 = svgRecibo('Comprobante PIX — Cliente', [
     ['Cliente', 'Familia Andrade'],
-    ['Cocina a medida', 'R$ 12.400,00'],
+    ['Cocina a medida', '₲ 12.400,00'],
     ['Fecha', '05/11/2026'],
     ['Estado', 'Completado'],
   ], '#0d9488');
@@ -541,19 +541,19 @@ export function seed({ force = false } = {}) {
       m.mimetype ?? null, m.enviado_em, m.status ?? 'recebida', m.transaction_id ?? null, m.entidade ?? 'empresa', ts
     );
 
-  wa({ direcao: 'entrada', remetente: 'Socio', tipo: 'texto', conteudo: 'Compré los tableros de MDF hoy, salió R$ 2.940 en Maderera Central. ¿Ya lo registraste?', enviado_em: '2026-11-16T11:42:00.000Z', transaction_id: txMdf?.id ?? null });
+  wa({ direcao: 'entrada', remetente: 'Socio', tipo: 'texto', conteudo: 'Compré los tableros de MDF hoy, salió ₲ 2.940 en Maderera Central. ¿Ya lo registraste?', enviado_em: '2026-11-16T11:42:00.000Z', transaction_id: txMdf?.id ?? null });
   wa({ direcao: 'entrada', remetente: 'Socio', tipo: 'imagem', conteudo: 'Recibo de la maderera', media_path: 'recibo-madeireira.svg', mimetype: 'image/svg+xml', enviado_em: '2026-11-16T11:43:00.000Z', transaction_id: txMdf?.id ?? null });
-  wa({ direcao: 'saida', remetente: 'Sistema', tipo: 'texto', conteudo: 'Recibí el recibo. Registré R$ 2.940,00 en Madera / MDF / aglomerado (empresa). ¿Confirma?', enviado_em: '2026-11-16T11:44:00.000Z', status: 'enviada' });
+  wa({ direcao: 'saida', remetente: 'Sistema', tipo: 'texto', conteudo: 'Recibí el recibo. Registré ₲ 2.940,00 en Madera / MDF / aglomerado (empresa). ¿Confirma?', enviado_em: '2026-11-16T11:44:00.000Z', status: 'enviada' });
   wa({ direcao: 'entrada', remetente: 'Socia', tipo: 'audio', conteudo: 'Audio de 0:04', media_path: 'audio-recado.wav', mimetype: 'audio/wav', enviado_em: '2026-11-16T12:05:00.000Z' });
   wa({ direcao: 'entrada', remetente: 'Socia', tipo: 'texto', conteudo: 'El cliente de la cocina pagó el saldo, entró en la cuenta de la empresa.', enviado_em: '2026-11-16T12:06:00.000Z', transaction_id: txCliente?.id ?? null });
   wa({ direcao: 'entrada', remetente: 'Socio', tipo: 'imagem', conteudo: 'Comprobante del PIX del cliente', media_path: 'comprovante-pix.svg', mimetype: 'image/svg+xml', enviado_em: '2026-11-16T12:07:00.000Z', transaction_id: txCliente?.id ?? null });
-  wa({ direcao: 'entrada', remetente: 'Socio', tipo: 'texto', conteudo: 'Pagué el flete de la entrega, R$ 180 en efectivo.', enviado_em: '2026-11-15T17:20:00.000Z' });
+  wa({ direcao: 'entrada', remetente: 'Socio', tipo: 'texto', conteudo: 'Pagué el flete de la entrega, ₲ 180 en efectivo.', enviado_em: '2026-11-15T17:20:00.000Z' });
   wa({ direcao: 'entrada', remetente: 'Socia', tipo: 'imagem', conteudo: 'Factura de los herrajes', media_path: 'recibo-ferragens.svg', mimetype: 'image/svg+xml', enviado_em: '2026-11-14T09:15:00.000Z', transaction_id: txFerragem?.id ?? null });
-  wa({ direcao: 'saida', remetente: 'Sistema', tipo: 'texto', conteudo: 'Balance de octubre cerrado: resultado de R$ 14.382,00 en la carpintería. ¿Quieres el resumen en PDF?', enviado_em: '2026-11-01T08:00:00.000Z', status: 'enviada' });
+  wa({ direcao: 'saida', remetente: 'Sistema', tipo: 'texto', conteudo: 'Balance de octubre cerrado: resultado de ₲ 14.382,00 en la carpintería. ¿Quieres el resumen en PDF?', enviado_em: '2026-11-01T08:00:00.000Z', status: 'enviada' });
   wa({ direcao: 'entrada', remetente: 'Socia', tipo: 'texto', conteudo: 'Sí, mándalo, y separa cuánto fue de retiro nuestro.', enviado_em: '2026-11-01T08:12:00.000Z' });
 
   setSetting('empresa_nome', 'Carpintería');
-  setSetting('moeda', 'BRL');
+  setSetting('moeda', 'PYG');
   setSetting('divisao_negocio', '60');
   setSetting('whatsapp_status', 'desconectado');
   setSetting('whatsapp_numero', '');

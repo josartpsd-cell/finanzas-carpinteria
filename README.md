@@ -35,7 +35,7 @@ Para publicar en internet, consulta `DEPLOY.md`. Para guardar los datos fuera de
 
 ## Moneda
 
-La moneda está en `R$` (real). Para cambiarla, edita la constante `MONEDA` al inicio de `public/app.js` y los textos de los formularios que dicen «(R$)».
+La moneda está en `₲` (guaraní). Para cambiarla, edita la constante `MONEDA` al inicio de `public/app.js` y los textos de los formularios que dicen «(₲)».
 
 ## WhatsApp: cómo conectar después
 

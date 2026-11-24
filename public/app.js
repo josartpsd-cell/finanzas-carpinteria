@@ -3,13 +3,13 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 const state = { boot: null, mes: null, page: 'painel' };
 
-const MONEDA = 'R$';
+const MONEDA = '₲';
 
 const nf = (n, opts = {}) => Number(n).toLocaleString('es-ES', { useGrouping: 'always', ...opts });
 
 const fmt = (v) => {
   const n = Number(v) || 0;
-  const s = nf(Math.abs(n), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const s = nf(Math.abs(n), { maximumFractionDigits: 0 });
   return `${n < 0 ? '-' : ''}${MONEDA} ${s}`;
 };
 const fmt0 = (v) => {
@@ -543,7 +543,7 @@ async function abrirFormLancamento(id) {
       </div>
       <div class="form-grid">
         <div class="field"><label>Fecha</label><input type="date" name="data" value="${t.data}" required></div>
-        <div class="field"><label>Valor (R$)</label><input type="number" name="valor" step="0.01" min="0.01" value="${t.valor}" placeholder="0,00" required></div>
+        <div class="field"><label>Valor (₲)</label><input type="number" name="valor" step="1" min="1" value="${t.valor}" placeholder="0" required></div>
         <div class="field"><label>Entidad</label>
           <select name="entidade">
             <option value="empresa" ${t.entidade === 'empresa' ? 'selected' : ''}>Empresa (carpintería)</option>
@@ -761,9 +761,9 @@ async function abrirCobroVenda(id) {
     body: `
       <form id="form-cobro" class="form-grid">
         <div class="field span-2"><label>Venta</label><input type="text" value="${esc(venda.descricao)}" disabled></div>
-        <div class="field"><label>Valor total (R$)</label><input type="text" value="${fmt(venda.valor)}" disabled></div>
-        <div class="field"><label>Saldo pendiente (R$)</label><input type="text" value="${fmt(venda.saldo)}" disabled></div>
-        <div class="field"><label>Valor del cobro (R$)</label><input type="number" name="valor" step="0.01" min="0.01" max="${venda.saldo}" value="${venda.saldo}" required></div>
+        <div class="field"><label>Valor total (₲)</label><input type="text" value="${fmt(venda.valor)}" disabled></div>
+        <div class="field"><label>Saldo pendiente (₲)</label><input type="text" value="${fmt(venda.saldo)}" disabled></div>
+        <div class="field"><label>Valor del cobro (₲)</label><input type="number" name="valor" step="1" min="1" max="${venda.saldo}" value="${venda.saldo}" required></div>
         <div class="field"><label>Fecha</label><input type="date" name="data" value="${new Date().toISOString().slice(0, 10)}" required></div>
         <div class="field"><label>Cuenta</label>
           <select name="conta_id">${contasEmpresa.map((c) => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')}</select>
@@ -815,8 +815,8 @@ async function abrirFormVenda(id) {
         <div class="field"><label>Estado</label>
           <select name="status">${Object.entries(STATUS_VENDA).map(([k, v]) => `<option value="${k}" ${s.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
         </div>
-        <div class="field"><label>Valor cobrado (R$)</label><input type="number" name="valor" step="0.01" min="0" value="${s.valor}" required></div>
-        <div class="field"><label>Costo de material (R$)</label><input type="number" name="custo" step="0.01" min="0" value="${s.custo}"></div>
+        <div class="field"><label>Valor cobrado (₲)</label><input type="number" name="valor" step="1" min="0" value="${s.valor}" required></div>
+        <div class="field"><label>Costo de material (₲)</label><input type="number" name="custo" step="1" min="0" value="${s.custo}"></div>
         <div class="field"><label>Reparto del negocio (%)</label><input type="number" name="percentual_negocio" step="1" min="0" max="100" value="${s.percentual_negocio ?? 60}"></div>
         <div class="field"><label>Forma de pago</label>
           <select name="forma_pagamento">${[['pix', 'Pix'], ['dinheiro', 'Efectivo'], ['debito', 'Débito'], ['credito', 'Crédito'], ['boleto', 'Boleto'], ['transferencia', 'Transferencia']]
@@ -1161,7 +1161,7 @@ async function abrirFormConta(id) {
         <option value="empresa" ${c.entidade === 'empresa' ? 'selected' : ''}>Empresa</option>
         <option value="pessoal" ${c.entidade === 'pessoal' ? 'selected' : ''}>Personal</option>
       </select></div>
-      <div class="field"><label>Saldo inicial (R$)</label><input type="number" name="saldo_inicial" step="0.01" value="${c.saldo_inicial}"></div>
+      <div class="field"><label>Saldo inicial (₲)</label><input type="number" name="saldo_inicial" step="1" value="${c.saldo_inicial}"></div>
     </form>`,
     footer: `<button class="btn" type="button" data-close>Cancelar</button><button class="btn btn-primary" type="submit" form="form-conta">Guardar</button>`,
     onMount(root) {
@@ -1405,7 +1405,7 @@ async function abrirVincular(id) {
         <div class="field"><label>Tipo</label><select name="tipo" id="v-tipo">
           <option value="despesa">Gasto</option><option value="receita">Ingreso</option>
         </select></div>
-        <div class="field"><label>Valor (R$)</label><input type="number" name="valor" step="0.01" min="0.01" value="${valor}" required></div>
+        <div class="field"><label>Valor (₲)</label><input type="number" name="valor" step="1" min="1" value="${valor}" required></div>
         <div class="field"><label>Fecha</label><input type="date" name="data" value="${hoje}" required></div>
         <div class="field"><label>Entidad</label><select name="entidade" id="v-ent">
           <option value="empresa">Empresa</option><option value="pessoal">Personal</option>

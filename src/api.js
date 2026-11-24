@@ -100,7 +100,7 @@ api.get('/bootstrap', (req, res) => {
     hoje: new Date().toISOString().slice(0, 10),
     mes_atual: mesAtual(),
     empresa_nome: getSetting('empresa_nome', 'Carpintería'),
-    moeda: getSetting('moeda', 'BRL'),
+    moeda: getSetting('moeda', 'PYG'),
     whatsapp: {
       status: getSetting('whatsapp_status', 'desconectado'),
       numero: getSetting('whatsapp_numero', ''),
