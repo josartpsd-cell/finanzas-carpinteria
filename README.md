@@ -37,6 +37,8 @@ Para publicar en internet, consulta `DEPLOY.md`. Para guardar los datos fuera de
 
 La moneda está en `₲` (guaraní). Para cambiarla, edita la constante `MONEDA` al inicio de `public/app.js` y los textos de los formularios que dicen «(₲)».
 
+El sistema acepta dos monedas: guaraní (₲) y real (R$). Cada cuenta, movimiento y venta tiene su moneda. Los totales se muestran en guaraníes, convirtiendo los valores en real por la cotización configurada en **Cuentas y categorías → Identidad** (₲ por R$ 1).
+
 ## WhatsApp: cómo conectar después
 
 La estructura ya está lista y recibe mensajes por el endpoint:

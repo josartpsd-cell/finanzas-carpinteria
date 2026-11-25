@@ -5,17 +5,21 @@ const state = { boot: null, mes: null, page: 'painel' };
 
 const MONEDA = '₲';
 
+const SIMBOLO = { PYG: '₲', BRL: 'R$' };
+const simbolo = (moeda) => SIMBOLO[moeda] || '₲';
+
 const nf = (n, opts = {}) => Number(n).toLocaleString('es-ES', { useGrouping: 'always', ...opts });
 
-const fmt = (v) => {
+const fmt = (v, moeda = 'PYG') => {
   const n = Number(v) || 0;
-  const s = nf(Math.abs(n), { maximumFractionDigits: 0 });
-  return `${n < 0 ? '-' : ''}${MONEDA} ${s}`;
+  const dec = moeda === 'BRL' ? 2 : 0;
+  const s = nf(Math.abs(n), { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  return `${n < 0 ? '-' : ''}${simbolo(moeda)} ${s}`;
 };
-const fmt0 = (v) => {
+const fmt0 = (v, moeda = 'PYG') => {
   const n = Number(v) || 0;
   const s = nf(Math.abs(n), { maximumFractionDigits: 0 });
-  return `${n < 0 ? '-' : ''}${MONEDA} ${s}`;
+  return `${n < 0 ? '-' : ''}${simbolo(moeda)} ${s}`;
 };
 const fmtCompact = (v) => {
   const n = Number(v) || 0;
@@ -446,7 +450,7 @@ async function renderLancamentos() {
       <td class="nowrap muted">${esc(t.pessoa || '—')}</td>
       <td><span class="tag ${t.status}">${t.status === 'pago' ? 'pagado' : 'pendiente'}</span></td>
       <td class="num ${t.tipo === 'receita' ? 'pos-text' : t.tipo === 'despesa' ? 'neg-text' : ''}">
-        ${t.tipo === 'receita' ? '+' : t.tipo === 'despesa' ? '−' : ''}${fmt(t.valor)}
+        ${t.tipo === 'receita' ? '+' : t.tipo === 'despesa' ? '−' : ''}${fmt(t.valor, t.moeda)}
       </td>
       <td class="actions">
         <button class="btn btn-sm btn-ghost" data-edit="${t.id}" title="Editar">${icon('edit')}</button>
@@ -531,7 +535,7 @@ async function abrirFormLancamento(id) {
   const t = atual || {
     tipo: 'despesa', data: new Date().toISOString().slice(0, 10), valor: '', entidade: 'empresa',
     conta_id: '', conta_destino_id: '', categoria_id: '', pessoa_id: '', descricao: '',
-    forma_pagamento: 'pix', status: 'pago', vencimento: '',
+    forma_pagamento: 'pix', status: 'pago', vencimento: '', moeda: state.boot?.moeda_base || 'PYG',
   };
 
   const body = `
@@ -543,7 +547,13 @@ async function abrirFormLancamento(id) {
       </div>
       <div class="form-grid">
         <div class="field"><label>Fecha</label><input type="date" name="data" value="${t.data}" required></div>
-        <div class="field"><label>Valor (₲)</label><input type="number" name="valor" step="1" min="1" value="${t.valor}" placeholder="0" required></div>
+        <div class="field"><label>Valor</label><input type="number" name="valor" step="1" min="1" value="${t.valor}" placeholder="0" required></div>
+        <div class="field"><label>Moneda</label>
+          <select name="moeda">
+            <option value="PYG" ${(t.moeda || 'PYG') === 'PYG' ? 'selected' : ''}>Guaraní (₲)</option>
+            <option value="BRL" ${t.moeda === 'BRL' ? 'selected' : ''}>Real (R$)</option>
+          </select>
+        </div>
         <div class="field"><label>Entidad</label>
           <select name="entidade">
             <option value="empresa" ${t.entidade === 'empresa' ? 'selected' : ''}>Empresa (carpintería)</option>
@@ -614,6 +624,7 @@ async function abrirFormLancamento(id) {
           tipo,
           data: fd.get('data'),
           valor: Number(fd.get('valor')),
+          moeda: fd.get('moeda'),
           entidade: fd.get('entidade'),
           conta_id: Number(fd.get('conta_id')),
           conta_destino_id: tipo === 'transferencia' ? Number(fd.get('conta_destino_id')) : null,
@@ -674,12 +685,12 @@ async function renderVendas() {
         <td class="nowrap">${fmtDate(s.data)}</td>
         <td><span class="desc">${esc(s.descricao)}</span><div class="meta">${esc(s.cliente || 'Sin cliente')}</div></td>
         <td><span class="tag ${s.tipo}">${s.tipo === 'servico' ? 'servicio' : 'mueble listo'}</span></td>
-        <td class="num">${fmt(s.valor)}</td>
-        <td class="num muted">${fmt(s.custo)}</td>
-        <td class="num ${margem >= 0 ? 'pos-text' : 'neg-text'}">${fmt(margem)}</td>
+        <td class="num">${fmt(s.valor, s.moeda)}</td>
+        <td class="num muted">${fmt(s.custo, s.moeda)}</td>
+        <td class="num ${margem >= 0 ? 'pos-text' : 'neg-text'}">${fmt(margem, s.moeda)}</td>
         <td class="num muted">${s.percentual_negocio ?? 60}/${100 - (s.percentual_negocio ?? 60)}</td>
-        <td class="num">${fmt(s.recebido)}</td>
-        <td class="num ${s.saldo > 0 ? 'neg-text' : 'muted'}">${fmt(s.saldo)}</td>
+        <td class="num">${fmt(s.recebido, s.moeda)}</td>
+        <td class="num ${s.saldo > 0 ? 'neg-text' : 'muted'}">${fmt(s.saldo, s.moeda)}</td>
         <td><span class="tag ${s.status === 'pago' ? 'pago' : 'pendente'}">${STATUS_VENDA[s.status] || s.status}</span></td>
         <td class="actions">
           ${s.saldo > 0 ? `<button class="btn btn-sm" data-receber="${s.id}" title="Registrar cobro">${icon('check')}</button>` : ''}
@@ -763,9 +774,9 @@ async function abrirCobroVenda(id) {
     body: `
       <form id="form-cobro" class="form-grid">
         <div class="field span-2"><label>Venta</label><input type="text" value="${esc(venda.descricao)}" disabled></div>
-        <div class="field"><label>Valor total (₲)</label><input type="text" value="${fmt(venda.valor)}" disabled></div>
-        <div class="field"><label>Saldo pendiente (₲)</label><input type="text" value="${fmt(venda.saldo)}" disabled></div>
-        <div class="field"><label>Valor del cobro (₲)</label><input type="number" name="valor" step="1" min="1" max="${venda.saldo}" value="${venda.saldo}" required></div>
+        <div class="field"><label>Valor total</label><input type="text" value="${fmt(venda.valor, venda.moeda)}" disabled></div>
+        <div class="field"><label>Saldo pendiente</label><input type="text" value="${fmt(venda.saldo, venda.moeda)}" disabled></div>
+        <div class="field"><label>Valor del cobro (${simbolo(venda.moeda)})</label><input type="number" name="valor" step="1" min="1" max="${venda.saldo}" value="${venda.saldo}" required></div>
         <div class="field"><label>Fecha</label><input type="date" name="data" value="${new Date().toISOString().slice(0, 10)}" required></div>
         <div class="field"><label>Cuenta</label>
           <select name="conta_id">${contasEmpresa.map((c) => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')}</select>
@@ -800,6 +811,7 @@ async function abrirFormVenda(id) {
   const s = atual || {
     data: new Date().toISOString().slice(0, 10), tipo: 'servico', cliente: '', descricao: '',
     valor: '', custo: '', status: 'orcamento', forma_pagamento: 'pix', observacoes: '',
+    moeda: state.boot?.moeda_base || 'PYG',
   };
   openModal({
     titulo: id ? 'Editar venta' : 'Nueva venta',
@@ -817,8 +829,14 @@ async function abrirFormVenda(id) {
         <div class="field"><label>Estado</label>
           <select name="status">${Object.entries(STATUS_VENDA).map(([k, v]) => `<option value="${k}" ${s.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
         </div>
-        <div class="field"><label>Valor cobrado (₲)</label><input type="number" name="valor" step="1" min="0" value="${s.valor}" required></div>
-        <div class="field"><label>Costo de material (₲)</label><input type="number" name="custo" step="1" min="0" value="${s.custo}"></div>
+        <div class="field"><label>Valor cobrado</label><input type="number" name="valor" step="1" min="0" value="${s.valor}" required></div>
+        <div class="field"><label>Costo de material</label><input type="number" name="custo" step="1" min="0" value="${s.custo}"></div>
+        <div class="field"><label>Moneda</label>
+          <select name="moeda">
+            <option value="PYG" ${(s.moeda || 'PYG') === 'PYG' ? 'selected' : ''}>Guaraní (₲)</option>
+            <option value="BRL" ${s.moeda === 'BRL' ? 'selected' : ''}>Real (R$)</option>
+          </select>
+        </div>
         <div class="field"><label>Reparto del negocio (%)</label><input type="number" name="percentual_negocio" step="1" min="0" max="100" value="${s.percentual_negocio ?? 60}"></div>
         <div class="field"><label>Forma de pago</label>
           <select name="forma_pagamento">${[['pix', 'Pix'], ['dinheiro', 'Efectivo'], ['debito', 'Débito'], ['credito', 'Crédito'], ['boleto', 'Boleto'], ['transferencia', 'Transferencia']]
@@ -976,8 +994,8 @@ async function renderContas() {
       <td><span class="desc">${esc(c.nome)}</span></td>
       <td><span class="tag ${c.entidade}">${c.entidade === 'pessoal' ? 'personal' : 'empresa'}</span></td>
       <td class="muted">${c.tipo === 'caixa' ? 'Caja' : c.tipo === 'banco' ? 'Banco' : c.tipo === 'cartao' ? 'Tarjeta' : 'Inversión'}</td>
-      <td class="num">${fmt(c.saldo_inicial)}</td>
-      <td class="num ${c.saldo < 0 ? 'neg-text' : 'pos-text'}">${fmt(c.saldo)}</td>
+      <td class="num">${fmt(c.saldo_inicial, c.moeda)}</td>
+      <td class="num ${c.saldo < 0 ? 'neg-text' : 'pos-text'}">${fmt(c.saldo, c.moeda)}</td>
       <td class="actions">
         <button class="btn btn-sm btn-ghost" data-editc="${c.id}">${icon('edit')}</button>
         <button class="btn btn-sm btn-ghost" data-delc="${c.id}">${icon('trash')}</button>
@@ -1037,6 +1055,7 @@ async function renderContas() {
           <div class="stack">
             <div class="field"><label>Nombre del negocio</label><input id="cfg-empresa" value="${esc(cfg.empresa_nome || 'Carpintería')}"></div>
             <div class="field"><label>Reparto del negocio (%)</label><input id="cfg-divisao" type="number" min="0" max="100" step="1" value="${esc(cfg.divisao_negocio || '60')}"><span class="hint">El resto es la ganancia del socio/a</span></div>
+            <div class="field"><label>Cotización del real (₲ por R$ 1)</label><input id="cfg-cotacao" type="number" min="1" step="1" value="${esc(cfg.cotacao_brl || '1400')}"><span class="hint">Se usa para sumar los movimientos en real a los totales en guaraníes</span></div>
             ${pessoas
               .map(
                 (p) => `<div class="form-grid">
@@ -1133,7 +1152,7 @@ function afterContas() {
   });
   $('#salvar-identidade')?.addEventListener('click', async () => {
     try {
-      await api('/settings', { method: 'PUT', body: { empresa_nome: $('#cfg-empresa').value, divisao_negocio: Number($('#cfg-divisao').value) } });
+      await api('/settings', { method: 'PUT', body: { empresa_nome: $('#cfg-empresa').value, divisao_negocio: Number($('#cfg-divisao').value), cotacao_brl: Number($('#cfg-cotacao').value) } });
       for (const inp of $$('[data-pessoa]')) {
         const id = inp.dataset.pessoa;
         const nome = $(`[data-pessoa="${id}"][data-campo="nome"]`).value;
@@ -1151,7 +1170,7 @@ function afterContas() {
 
 async function abrirFormConta(id) {
   const contas = await api('/accounts');
-  const c = id ? contas.find((x) => x.id === id) : { nome: '', tipo: 'caixa', entidade: 'empresa', saldo_inicial: 0 };
+  const c = id ? contas.find((x) => x.id === id) : { nome: '', tipo: 'caixa', entidade: 'empresa', saldo_inicial: 0, moeda: 'PYG' };
   openModal({
     titulo: id ? 'Editar cuenta' : 'Nueva cuenta',
     body: `<form id="form-conta" class="form-grid">
@@ -1163,7 +1182,11 @@ async function abrirFormConta(id) {
         <option value="empresa" ${c.entidade === 'empresa' ? 'selected' : ''}>Empresa</option>
         <option value="pessoal" ${c.entidade === 'pessoal' ? 'selected' : ''}>Personal</option>
       </select></div>
-      <div class="field"><label>Saldo inicial (₲)</label><input type="number" name="saldo_inicial" step="1" value="${c.saldo_inicial}"></div>
+      <div class="field"><label>Saldo inicial</label><input type="number" name="saldo_inicial" step="1" value="${c.saldo_inicial}"></div>
+      <div class="field"><label>Moneda</label><select name="moeda">
+        <option value="PYG" ${(c.moeda || 'PYG') === 'PYG' ? 'selected' : ''}>Guaraní (₲)</option>
+        <option value="BRL" ${c.moeda === 'BRL' ? 'selected' : ''}>Real (R$)</option>
+      </select></div>
     </form>`,
     footer: `<button class="btn" type="button" data-close>Cancelar</button><button class="btn btn-primary" type="submit" form="form-conta">Guardar</button>`,
     onMount(root) {

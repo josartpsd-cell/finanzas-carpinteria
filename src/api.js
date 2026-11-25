@@ -20,6 +20,16 @@ const pctNegocio = (v) => {
 };
 const ENTIDADES = ['pessoal', 'empresa'];
 const TIPOS = ['receita', 'despesa', 'transferencia'];
+const MOEDAS = ['PYG', 'BRL'];
+const moedaValida = (m) => (MOEDAS.includes(m) ? m : 'PYG');
+const moedaBase = () => moedaValida(getSetting('moeda_base', 'PYG'));
+const cotacaoBrl = () => {
+  const n = Number(getSetting('cotacao_brl', '1400'));
+  return Number.isFinite(n) && n > 0 ? n : 1400;
+};
+const fatorMoeda = (moeda) => (moeda === 'BRL' ? cotacaoBrl() : 1);
+const paraBase = (valor, moeda) => round2((Number(valor) || 0) * fatorMoeda(moeda));
+const SQL_FATOR = () => `CASE WHEN moeda = 'BRL' THEN ${cotacaoBrl()} ELSE 1 END`;
 
 function mesAtual() {
   const d = new Date();
@@ -40,7 +50,7 @@ function mesAnterior(mes) {
 }
 
 const SQL_SALDO_CONTA = `
-  SELECT a.id, a.nome, a.tipo, a.entidade, a.saldo_inicial, a.ativo,
+  SELECT a.id, a.nome, a.tipo, a.entidade, a.saldo_inicial, a.ativo, a.moeda,
     ROUND(a.saldo_inicial
       + COALESCE((SELECT SUM(CASE WHEN t.tipo = 'receita' THEN t.valor WHEN t.tipo IN ('despesa','transferencia') THEN -t.valor ELSE 0 END)
                   FROM transactions t WHERE t.conta_id = a.id AND t.status = 'pago'), 0)
@@ -49,17 +59,21 @@ const SQL_SALDO_CONTA = `
   FROM accounts a`;
 
 function saldoContas() {
-  return all(`${SQL_SALDO_CONTA} WHERE a.ativo = 1 ORDER BY a.entidade, a.tipo, a.nome`);
+  return all(`${SQL_SALDO_CONTA} WHERE a.ativo = 1 ORDER BY a.entidade, a.tipo, a.nome`).map((c) => ({
+    ...c,
+    saldo_base: paraBase(c.saldo, c.moeda),
+  }));
 }
 
 function totaisPeriodo(inicio, fim, entidade) {
   const filtroEnt = entidade ? ' AND entidade = ?' : '';
   const p = entidade ? [inicio, fim, entidade] : [inicio, fim];
+  const f = SQL_FATOR();
   const r = get(
     `SELECT
-       ROUND(COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor END), 0), 2) AS receitas,
-       ROUND(COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN valor END), 0), 2) AS despesas,
-       ROUND(COALESCE(SUM(CASE WHEN tipo = 'transferencia' THEN valor END), 0), 2) AS transferencias,
+       ROUND(COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor * ${f} END), 0), 2) AS receitas,
+       ROUND(COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN valor * ${f} END), 0), 2) AS despesas,
+       ROUND(COALESCE(SUM(CASE WHEN tipo = 'transferencia' THEN valor * ${f} END), 0), 2) AS transferencias,
        COUNT(*) AS lancamentos
      FROM transactions WHERE data BETWEEN ? AND ? AND status = 'pago'${filtroEnt}`,
     ...p
@@ -68,10 +82,11 @@ function totaisPeriodo(inicio, fim, entidade) {
 }
 
 function pendentes() {
+  const f = SQL_FATOR();
   const r = get(
     `SELECT
-       ROUND(COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor END), 0), 2) AS a_receber,
-       ROUND(COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN valor END), 0), 2) AS a_pagar,
+       ROUND(COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor * ${f} END), 0), 2) AS a_receber,
+       ROUND(COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN valor * ${f} END), 0), 2) AS a_pagar,
        COALESCE(SUM(CASE WHEN tipo = 'receita' THEN 1 ELSE 0 END), 0) AS qtd_receber,
        COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN 1 ELSE 0 END), 0) AS qtd_pagar,
        COUNT(*) AS qtd
@@ -79,10 +94,10 @@ function pendentes() {
   );
   const vendas = get(
     `SELECT
-       ROUND(COALESCE(SUM(saldo), 0), 2) AS a_receber,
+       ROUND(COALESCE(SUM(saldo * CASE WHEN moeda = 'BRL' THEN ${cotacaoBrl()} ELSE 1 END), 0), 2) AS a_receber,
        COUNT(*) AS qtd
      FROM (
-       SELECT s.valor - COALESCE((SELECT SUM(t.valor) FROM transactions t WHERE t.venda_id = s.id AND t.tipo = 'receita'), 0) AS saldo
+       SELECT s.moeda, s.valor - COALESCE((SELECT SUM(t.valor) FROM transactions t WHERE t.venda_id = s.id AND t.tipo = 'receita'), 0) AS saldo
        FROM sales s
      ) WHERE saldo > 0.005`
   );
@@ -101,6 +116,8 @@ api.get('/bootstrap', (req, res) => {
     mes_atual: mesAtual(),
     empresa_nome: getSetting('empresa_nome', 'Carpintería'),
     moeda: getSetting('moeda', 'PYG'),
+    moeda_base: moedaBase(),
+    cotacao_brl: cotacaoBrl(),
     divisao_negocio: Number(getSetting('divisao_negocio', '60')),
     whatsapp: {
       status: getSetting('whatsapp_status', 'desconectado'),
@@ -126,7 +143,7 @@ api.get('/dashboard', (req, res) => {
   const contas = saldoContas();
 
   const retiradas = get(
-    `SELECT ROUND(COALESCE(SUM(valor), 0), 2) AS total FROM transactions
+    `SELECT ROUND(COALESCE(SUM(valor * ${SQL_FATOR()}), 0), 2) AS total FROM transactions
      WHERE tipo = 'transferencia' AND status = 'pago' AND data BETWEEN ? AND ?`,
     inicio, fim
   ).total;
@@ -142,7 +159,7 @@ api.get('/dashboard', (req, res) => {
   }
 
   const porCategoria = all(
-    `SELECT c.nome, c.cor, c.grupo, ROUND(SUM(t.valor), 2) AS total
+    `SELECT c.nome, c.cor, c.grupo, ROUND(SUM(t.valor * ${SQL_FATOR()}), 2) AS total
      FROM transactions t JOIN categories c ON c.id = t.categoria_id
      WHERE t.tipo = 'despesa' AND t.status = 'pago' AND t.data BETWEEN ? AND ?
      GROUP BY c.id ORDER BY total DESC LIMIT 8`,
@@ -164,9 +181,9 @@ api.get('/dashboard', (req, res) => {
     total,
     total_anterior: totalAnterior,
     retiradas,
-    saldo_total: round2(contas.reduce((s, c) => s + c.saldo, 0)),
-    saldo_empresa: round2(contas.filter((c) => c.entidade === 'empresa').reduce((s, c) => s + c.saldo, 0)),
-    saldo_pessoal: round2(contas.filter((c) => c.entidade === 'pessoal').reduce((s, c) => s + c.saldo, 0)),
+    saldo_total: round2(contas.reduce((s, c) => s + c.saldo_base, 0)),
+    saldo_empresa: round2(contas.filter((c) => c.entidade === 'empresa').reduce((s, c) => s + c.saldo_base, 0)),
+    saldo_pessoal: round2(contas.filter((c) => c.entidade === 'pessoal').reduce((s, c) => s + c.saldo_base, 0)),
     pendentes: pendentes(),
     contas,
     serie,
@@ -187,7 +204,7 @@ api.get('/balanco', (req, res) => {
   const pessoalAnt = totaisPeriodo(fa.inicio, fa.fim, 'pessoal');
 
   const retiradas = all(
-    `SELECT t.id, t.data, t.valor, t.descricao, a.nome AS origem, d.nome AS destino
+    `SELECT t.id, t.data, t.valor, t.moeda, t.descricao, a.nome AS origem, d.nome AS destino
      FROM transactions t
      LEFT JOIN accounts a ON a.id = t.conta_id
      LEFT JOIN accounts d ON d.id = t.conta_destino_id
@@ -197,7 +214,7 @@ api.get('/balanco', (req, res) => {
   );
 
   const categorias = all(
-    `SELECT c.nome, c.cor, c.grupo, c.tipo, t.entidade, ROUND(SUM(t.valor), 2) AS total, COUNT(*) AS qtd
+    `SELECT c.nome, c.cor, c.grupo, c.tipo, t.entidade, ROUND(SUM(t.valor * ${SQL_FATOR()}), 2) AS total, COUNT(*) AS qtd
      FROM transactions t JOIN categories c ON c.id = t.categoria_id
      WHERE t.status = 'pago' AND t.data BETWEEN ? AND ? AND t.tipo IN ('receita','despesa')
      GROUP BY c.id, t.entidade ORDER BY t.entidade, c.tipo DESC, total DESC`,
@@ -206,8 +223,8 @@ api.get('/balanco', (req, res) => {
 
   const porPessoa = all(
     `SELECT p.id, p.nome, p.cor,
-       ROUND(COALESCE(SUM(CASE WHEN t.tipo = 'receita' THEN t.valor END), 0), 2) AS receitas,
-       ROUND(COALESCE(SUM(CASE WHEN t.tipo = 'despesa' THEN t.valor END), 0), 2) AS despesas,
+       ROUND(COALESCE(SUM(CASE WHEN t.tipo = 'receita' THEN t.valor * ${SQL_FATOR()} END), 0), 2) AS receitas,
+       ROUND(COALESCE(SUM(CASE WHEN t.tipo = 'despesa' THEN t.valor * ${SQL_FATOR()} END), 0), 2) AS despesas,
        COUNT(t.id) AS lancamentos
      FROM people p LEFT JOIN transactions t
        ON t.pessoa_id = p.id AND t.status = 'pago' AND t.data BETWEEN ? AND ?
@@ -217,8 +234,8 @@ api.get('/balanco', (req, res) => {
 
   const saldoFim = get(
     `SELECT ROUND(
-       (SELECT COALESCE(SUM(saldo_inicial),0) FROM accounts WHERE ativo = 1)
-       + COALESCE((SELECT SUM(CASE WHEN tipo='receita' THEN valor WHEN tipo='despesa' THEN -valor ELSE 0 END)
+       (SELECT COALESCE(SUM(saldo_inicial * CASE WHEN moeda = 'BRL' THEN ${cotacaoBrl()} ELSE 1 END),0) FROM accounts WHERE ativo = 1)
+       + COALESCE((SELECT SUM(CASE WHEN tipo='receita' THEN valor * ${SQL_FATOR()} WHEN tipo='despesa' THEN -valor * ${SQL_FATOR()} ELSE 0 END)
                    FROM transactions WHERE status='pago' AND data <= ?), 0), 2) AS saldo`,
     fim
   ).saldo;
@@ -292,9 +309,10 @@ api.get('/transactions', (req, res) => {
   const rows = all(sql, ...params);
   const resumo = rows.reduce(
     (acc, r) => {
-      if (r.tipo === 'receita') acc.receitas += r.valor;
-      if (r.tipo === 'despesa') acc.despesas += r.valor;
-      if (r.tipo === 'transferencia') acc.transferencias += r.valor;
+      const v = paraBase(r.valor, r.moeda);
+      if (r.tipo === 'receita') acc.receitas += v;
+      if (r.tipo === 'despesa') acc.despesas += v;
+      if (r.tipo === 'transferencia') acc.transferencias += v;
       return acc;
     },
     { receitas: 0, despesas: 0, transferencias: 0 }
@@ -325,7 +343,7 @@ function validarLancamento(b, existente = {}) {
   if (tipo === 'transferencia' && !num(b.conta_destino_id ?? existente.conta_destino_id)) {
     throw new Error('La transferencia necesita una cuenta de destino');
   }
-  return { tipo, valor: round2(valor), data, entidade, conta_id };
+  return { tipo, valor: round2(valor), data, entidade, conta_id, moeda: moedaValida(b.moeda ?? existente.moeda ?? 'PYG') };
 }
 
 api.post('/transactions', (req, res) => {
@@ -333,8 +351,8 @@ api.post('/transactions', (req, res) => {
     const b = req.body || {};
     const v = validarLancamento(b);
     const r = run(
-      `INSERT INTO transactions (data, tipo, valor, entidade, conta_id, conta_destino_id, categoria_id, pessoa_id, descricao, forma_pagamento, status, vencimento, origem, venda_id, criado_em)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO transactions (data, tipo, valor, entidade, conta_id, conta_destino_id, categoria_id, pessoa_id, descricao, forma_pagamento, status, vencimento, origem, venda_id, moeda, criado_em)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       v.data, v.tipo, v.valor, v.entidade, v.conta_id,
       b.conta_destino_id ? num(b.conta_destino_id) : null,
       b.categoria_id ? num(b.categoria_id) : null,
@@ -345,6 +363,7 @@ api.post('/transactions', (req, res) => {
       b.vencimento || null,
       b.origem || 'manual',
       b.venda_id ? num(b.venda_id) : null,
+      v.moeda,
       nowIso()
     );
     res.status(201).json(get('SELECT * FROM transactions WHERE id = ?', Number(r.lastInsertRowid)));
@@ -384,7 +403,7 @@ api.put('/transactions/:id', (req, res) => {
     const v = validarLancamento(b, atual);
     run(
       `UPDATE transactions SET data=?, tipo=?, valor=?, entidade=?, conta_id=?, conta_destino_id=?, categoria_id=?, pessoa_id=?,
-        descricao=?, forma_pagamento=?, status=?, vencimento=? WHERE id=?`,
+        descricao=?, forma_pagamento=?, status=?, vencimento=?, moeda=? WHERE id=?`,
       v.data, v.tipo, v.valor, v.entidade, v.conta_id,
       b.conta_destino_id ? num(b.conta_destino_id) : null,
       b.categoria_id ? num(b.categoria_id) : null,
@@ -393,6 +412,7 @@ api.put('/transactions/:id', (req, res) => {
       b.forma_pagamento || 'pix',
       b.status === 'pendente' ? 'pendente' : 'pago',
       b.vencimento || null,
+      v.moeda,
       id
     );
     res.json(get('SELECT * FROM transactions WHERE id = ?', id));
@@ -414,8 +434,8 @@ api.post('/accounts', (req, res) => {
   const b = req.body || {};
   if (!b.nome) return res.status(400).json({ erro: 'El nombre es obligatorio' });
   const r = run(
-    'INSERT INTO accounts (nome, tipo, entidade, saldo_inicial, ativo, criado_em) VALUES (?,?,?,?,1,?)',
-    String(b.nome).slice(0, 80), b.tipo || 'caixa', ENTIDADES.includes(b.entidade) ? b.entidade : 'empresa', num(b.saldo_inicial), nowIso()
+    'INSERT INTO accounts (nome, tipo, entidade, saldo_inicial, ativo, moeda, criado_em) VALUES (?,?,?,?,1,?,?)',
+    String(b.nome).slice(0, 80), b.tipo || 'caixa', ENTIDADES.includes(b.entidade) ? b.entidade : 'empresa', num(b.saldo_inicial), moedaValida(b.moeda), nowIso()
   );
   res.status(201).json(get('SELECT * FROM accounts WHERE id = ?', Number(r.lastInsertRowid)));
 });
@@ -424,9 +444,9 @@ api.put('/accounts/:id', (req, res) => {
   const b = req.body || {};
   const id = num(req.params.id);
   run(
-    'UPDATE accounts SET nome=?, tipo=?, entidade=?, saldo_inicial=?, ativo=? WHERE id=?',
+    'UPDATE accounts SET nome=?, tipo=?, entidade=?, saldo_inicial=?, ativo=?, moeda=? WHERE id=?',
     String(b.nome || '').slice(0, 80), b.tipo || 'caixa', ENTIDADES.includes(b.entidade) ? b.entidade : 'empresa',
-    num(b.saldo_inicial), b.ativo === 0 || b.ativo === false ? 0 : 1, id
+    num(b.saldo_inicial), b.ativo === 0 || b.ativo === false ? 0 : 1, moedaValida(b.moeda), id
   );
   res.json(get('SELECT * FROM accounts WHERE id = ?', id));
 });
@@ -508,22 +528,31 @@ api.get('/sales', (req, res) => {
     const recebido = round2(s.recebido || 0);
     const margem = round2(s.valor - s.custo);
     const pctNegocio = s.percentual_negocio == null ? 60 : s.percentual_negocio;
+    const parteNegocio = round2((margem * pctNegocio) / 100);
+    const parteSocio = round2(margem - parteNegocio);
     return {
       ...s,
       recebido,
       saldo: round2(s.valor - recebido),
       margem,
-      parte_negocio: round2((margem * pctNegocio) / 100),
-      parte_socio: round2(margem - (margem * pctNegocio) / 100),
+      parte_negocio: parteNegocio,
+      parte_socio: parteSocio,
+      valor_base: paraBase(s.valor, s.moeda),
+      custo_base: paraBase(s.custo, s.moeda),
+      margem_base: paraBase(margem, s.moeda),
+      recebido_base: paraBase(recebido, s.moeda),
+      saldo_base: paraBase(s.valor - recebido, s.moeda),
+      parte_negocio_base: paraBase(parteNegocio, s.moeda),
+      parte_socio_base: paraBase(parteSocio, s.moeda),
     };
   });
   const resumo = itens.reduce(
     (acc, s) => {
-      acc.valor += s.valor;
-      acc.custo += s.custo;
-      acc.recebido += s.recebido;
-      acc.parte_negocio += s.parte_negocio;
-      acc.parte_socio += s.parte_socio;
+      acc.valor += s.valor_base;
+      acc.custo += s.custo_base;
+      acc.recebido += s.recebido_base;
+      acc.parte_negocio += s.parte_negocio_base;
+      acc.parte_socio += s.parte_socio_base;
       acc.qtd += 1;
       if (s.tipo === 'servico') acc.servicos += 1;
       if (s.tipo === 'produto') acc.produtos += 1;
@@ -552,14 +581,14 @@ api.post('/sales', (req, res) => {
   const b = req.body || {};
   if (!b.descricao) return res.status(400).json({ erro: 'La descripción es obligatoria' });
   const r = run(
-    `INSERT INTO sales (data, tipo, cliente, descricao, valor, custo, status, forma_pagamento, observacoes, percentual_negocio, criado_em)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO sales (data, tipo, cliente, descricao, valor, custo, status, forma_pagamento, observacoes, percentual_negocio, moeda, criado_em)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
     String(b.data || new Date().toISOString().slice(0, 10)).slice(0, 10),
     b.tipo === 'produto' ? 'produto' : 'servico',
     b.cliente || null, String(b.descricao).slice(0, 200),
     round2(num(b.valor)), round2(num(b.custo)),
     b.status || 'orcamento', b.forma_pagamento || 'pix', b.observacoes || null,
-    pctNegocio(b.percentual_negocio), nowIso()
+    pctNegocio(b.percentual_negocio), moedaValida(b.moeda), nowIso()
   );
   res.status(201).json(get('SELECT * FROM sales WHERE id = ?', Number(r.lastInsertRowid)));
 });
@@ -568,13 +597,13 @@ api.put('/sales/:id', (req, res) => {
   const b = req.body || {};
   const id = num(req.params.id);
   run(
-    `UPDATE sales SET data=?, tipo=?, cliente=?, descricao=?, valor=?, custo=?, status=?, forma_pagamento=?, observacoes=?, percentual_negocio=? WHERE id=?`,
+    `UPDATE sales SET data=?, tipo=?, cliente=?, descricao=?, valor=?, custo=?, status=?, forma_pagamento=?, observacoes=?, percentual_negocio=?, moeda=? WHERE id=?`,
     String(b.data || new Date().toISOString().slice(0, 10)).slice(0, 10),
     b.tipo === 'produto' ? 'produto' : 'servico',
     b.cliente || null, String(b.descricao || '').slice(0, 200),
     round2(num(b.valor)), round2(num(b.custo)),
     b.status || 'orcamento', b.forma_pagamento || 'pix', b.observacoes || null,
-    pctNegocio(b.percentual_negocio), id
+    pctNegocio(b.percentual_negocio), moedaValida(b.moeda), id
   );
   res.json(get('SELECT * FROM sales WHERE id = ?', id));
 });
@@ -604,13 +633,13 @@ api.post('/sales/:id/receber', (req, res) => {
   if (valor <= 0) return res.status(400).json({ erro: 'El valor del cobro debe ser mayor que cero' });
   if (valor > saldo + 0.005) return res.status(400).json({ erro: `El saldo pendiente es ${saldo.toFixed(2)}` });
   const r = run(
-    `INSERT INTO transactions (data, tipo, valor, entidade, conta_id, categoria_id, pessoa_id, descricao, forma_pagamento, status, origem, venda_id, criado_em)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO transactions (data, tipo, valor, entidade, conta_id, categoria_id, pessoa_id, descricao, forma_pagamento, status, origem, venda_id, moeda, criado_em)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     String(b.data || new Date().toISOString().slice(0, 10)).slice(0, 10),
     'receita', valor, 'empresa', contaId, cat?.id ?? null,
     b.pessoa_id ? num(b.pessoa_id) : null,
     `${venda.descricao}${venda.cliente ? ' — ' + venda.cliente : ''}`,
-    b.forma_pagamento || venda.forma_pagamento || 'pix', 'pago', 'venda', id, nowIso()
+    b.forma_pagamento || venda.forma_pagamento || 'pix', 'pago', 'venda', id, moedaValida(venda.moeda), nowIso()
   );
   const totalRecebido = round2(jaRecebido + valor);
   const novoStatus = totalRecebido >= venda.valor - 0.005 ? 'pago' : venda.status === 'orcamento' ? 'aprovado' : venda.status;
@@ -726,10 +755,16 @@ api.get('/settings', (req, res) => {
 api.put('/settings', (req, res) => {
   const b = req.body || {};
   const permitidas = [
-    'empresa_nome', 'moeda', 'divisao_negocio', 'whatsapp_status', 'whatsapp_numero', 'whatsapp_provider', 'whatsapp_webhook_token',
+    'empresa_nome', 'moeda', 'moeda_base', 'cotacao_brl', 'divisao_negocio', 'whatsapp_status', 'whatsapp_numero', 'whatsapp_provider', 'whatsapp_webhook_token',
   ];
   for (const [k, v] of Object.entries(b)) {
-    if (permitidas.includes(k)) setSetting(k, k === 'divisao_negocio' ? String(pctNegocio(v)) : v);
+    if (!permitidas.includes(k)) continue;
+    if (k === 'divisao_negocio') setSetting(k, String(pctNegocio(v)));
+    else if (k === 'moeda_base') setSetting(k, moedaValida(v));
+    else if (k === 'cotacao_brl') {
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) setSetting(k, String(Math.round(n * 10000) / 10000));
+    } else setSetting(k, v);
   }
   res.json(settingsPublicos());
 });
@@ -775,15 +810,15 @@ function csvEscape(v) {
 api.get('/export/lancamentos.csv', (req, res) => {
   const f = faixaMes(req.query.mes);
   const rows = all(
-    `SELECT t.data, t.tipo, t.entidade, t.valor, t.status, c.nome AS categoria, a.nome AS conta, p.nome AS pessoa, t.descricao, t.forma_pagamento
+    `SELECT t.data, t.tipo, t.entidade, t.valor, t.moeda, t.status, c.nome AS categoria, a.nome AS conta, p.nome AS pessoa, t.descricao, t.forma_pagamento
      FROM transactions t LEFT JOIN categories c ON c.id = t.categoria_id
      LEFT JOIN accounts a ON a.id = t.conta_id LEFT JOIN people p ON p.id = t.pessoa_id
      WHERE t.data BETWEEN ? AND ? ORDER BY t.data`,
     f.inicio, f.fim
   );
   const linhas = [
-    ['Fecha', 'Tipo', 'Entidad', 'Valor', 'Estado', 'Categoría', 'Cuenta', 'Persona', 'Descripción', 'Forma de pago'],
-    ...rows.map((r) => [r.data, r.tipo, r.entidade, String(r.valor).replace('.', ','), r.status, r.categoria, r.conta, r.pessoa, r.descricao, r.forma_pagamento]),
+    ['Fecha', 'Tipo', 'Entidad', 'Valor', 'Moneda', 'Estado', 'Categoría', 'Cuenta', 'Persona', 'Descripción', 'Forma de pago'],
+    ...rows.map((r) => [r.data, r.tipo, r.entidade, String(r.valor).replace('.', ','), r.moeda, r.status, r.categoria, r.conta, r.pessoa, r.descricao, r.forma_pagamento]),
   ];
   const csv = '\uFEFF' + linhas.map((l) => l.map(csvEscape).join(';')).join('\r\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');

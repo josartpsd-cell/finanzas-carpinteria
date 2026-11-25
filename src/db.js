@@ -149,6 +149,9 @@ function garantirColuna(tabela, coluna, definicao) {
 }
 
 garantirColuna('sales', 'percentual_negocio', 'REAL NOT NULL DEFAULT 60');
+garantirColuna('sales', 'moeda', "TEXT NOT NULL DEFAULT 'PYG'");
+garantirColuna('transactions', 'moeda', "TEXT NOT NULL DEFAULT 'PYG'");
+garantirColuna('accounts', 'moeda', "TEXT NOT NULL DEFAULT 'PYG'");
 
 export const nowIso = () => new Date().toISOString();
 
